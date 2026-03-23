@@ -73,17 +73,25 @@ def build_habit_baseline(df):
     return df
 
 def run_ensemble_models(X_scaled):
-    """Run 3-model ensemble with fixed defaults."""
+    """Run 3-model ensemble with fixed defaults and proper novelty handling."""
     iso = IsolationForest(contamination=CONTAMINATION, n_estimators=N_ESTIMATORS, random_state=42)
-    lof = LocalOutlierFactor(contamination=CONTAMINATION, novelty=True)
+    lof = LocalOutlierFactor(contamination=CONTAMINATION, novelty=True)  # Keep novelty=True for consistency
     ocsvm = OneClassSVM(nu=CONTAMINATION)
     
+    # Isolation Forest: supports fit_predict
     iso_score = -iso.fit_predict(X_scaled)
-    lof_score = -lof.fit_predict(X_scaled)
-    ocsvm_score = (ocsvm.fit_predict(X_scaled) == -1).astype(int)
     
-    # Weighted ensemble
-    return 0.5 * iso_score + 0.3 * lof_score + 0.2 * ocsvm_score
+    # LOF in novelty mode: fit first, then score_samples (negative = outlier)
+    lof.fit(X_scaled)
+    lof_score = -lof.score_samples(X_scaled)  # Higher score = more anomalous
+    
+    # OneClassSVM: fit then predict ( -1 = outlier )
+    ocsvm.fit(X_scaled)
+    ocsvm_score = (ocsvm.predict(X_scaled) == -1).astype(int)
+    
+    # Weighted ensemble (adjust weights if needed)
+    ensemble_score = 0.5 * iso_score + 0.3 * lof_score + 0.2 * ocsvm_score
+    return ensemble_score
 
 # ====================== TAB 1: UPLOAD & ANALYSIS ======================
 with tab1:
